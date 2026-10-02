@@ -1,0 +1,232 @@
+# aurora.yaml — Master Configuration & Component Registry
+# This file is the single source of truth for Aurora's component wiring.
+# Change LLM providers, enable/disable skills, configure privacy — all here.
+
+app:
+  name: "Aurora"
+  version: "1.0.0"
+  debug: false
+  host: "0.0.0.0"
+  port: 8000
+  frontend_port: 3000
+
+# ─────────────────────────────────────────────────
+# SECURITY
+# ─────────────────────────────────────────────────
+security:
+  auth_enabled: false
+  pin_lock: "${AURORA_PIN}"
+  session_timeout_minutes: 60
+
+# ─────────────────────────────────────────────────
+# VAULT CONFIGURATION
+# ─────────────────────────────────────────────────
+vault:
+  path: "${AURORA_VAULT_PATH}"
+  watch_changes: true
+  index_on_startup: true
+  excluded_folders:
+    - ".obsidian"
+    - ".trash"
+    - ".git"
+  supported_extensions:
+    - ".md"
+    - ".canvas"
+  attachment_extensions:
+    - ".png"
+    - ".jpg"
+    - ".jpeg"
+    - ".gif"
+    - ".svg"
+    - ".webp"
+    - ".pdf"
+
+# ─────────────────────────────────────────────────
+# LLM PROVIDERS (Swappable — change active_provider to switch)
+# ─────────────────────────────────────────────────
+llm:
+  active_provider: "gemini"
+
+  providers:
+    openai:
+      adapter: "aurora.ai.adapters.OpenAIAdapter"
+      config:
+        api_key: "${OPENAI_API_KEY}"
+        default_model: "gpt-4o-mini"
+        fallback_model: "gpt-3.5-turbo"
+        temperature: 0.7
+        max_tokens: 2000
+
+    gemini:
+      adapter: "aurora.ai.adapters.GeminiAdapter"
+      config:
+        api_key: "${GEMINI_API_KEY}"
+        default_model: "gemini-3.6-flash"
+        temperature: 0.7
+        max_tokens: 2000
+
+    claude:
+      adapter: "aurora.ai.adapters.ClaudeAdapter"
+      config:
+        api_key: "${ANTHROPIC_API_KEY}"
+        default_model: "claude-sonnet-4-20250514"
+        temperature: 0.7
+        max_tokens: 2000
+
+    ollama:
+      adapter: "aurora.ai.adapters.OllamaAdapter"
+      config:
+        base_url: "${OLLAMA_BASE_URL}"
+        default_model: "llama3.1"
+        temperature: 0.7
+        max_tokens: 2000
+
+  embedding:
+    active_provider: "openai"
+    providers:
+      openai:
+        adapter: "aurora.ai.adapters.OpenAIEmbeddingAdapter"
+        config:
+          api_key: "${OPENAI_API_KEY}"
+          model: "text-embedding-3-small"
+      ollama:
+        adapter: "aurora.ai.adapters.OllamaEmbeddingAdapter"
+        config:
+          base_url: "${OLLAMA_BASE_URL}"
+          model: "nomic-embed-text"
+
+# ─────────────────────────────────────────────────
+# PRIVACY SANITIZER
+# ─────────────────────────────────────────────────
+privacy:
+  enabled: true
+  pii_detection: true
+  show_sanitization_preview: true
+  strict_mode: false
+
+  enabled_categories:
+    - person_name
+    - email
+    - phone
+    - address
+    - credit_card
+    - api_key
+    - ip_address
+
+  content_rules:
+    - id: "block-journal"
+      name: "Block Journal Entries"
+      rule_type: "folder_block"
+      config:
+        folders:
+          - "Journal"
+          - "Personal/Diary"
+      enabled: true
+      priority: 10
+
+    - id: "block-private-tags"
+      name: "Block Private Tagged Notes"
+      rule_type: "tag_block"
+      config:
+        tags:
+          - "#private"
+          - "#confidential"
+          - "#personal"
+      enabled: true
+      priority: 10
+
+  allowlist: []
+  custom_patterns: []
+
+# ─────────────────────────────────────────────────
+# SKILLS (Swappable — enable/disable without code changes)
+# ─────────────────────────────────────────────────
+skills:
+  auto_discover: true
+  custom_skills_path: "./skills/custom"
+
+  router:
+    default_skill: "note_finder"
+    confidence_threshold: 0.5
+    use_llm_fallback: true
+
+  builtin:
+    note_creator:
+      enabled: true
+      class: "aurora.skills.builtin.NoteCreatorSkill"
+      parameters:
+        default_folder: "Inbox"
+        add_frontmatter: true
+        auto_tag: true
+        auto_link: true
+
+    note_finder:
+      enabled: true
+      class: "aurora.skills.builtin.NoteFinderSkill"
+      parameters:
+        max_results: 5
+        search_type: "hybrid"
+        include_preview: true
+
+    summarizer:
+      enabled: true
+      class: "aurora.skills.builtin.SummarizerSkill"
+      parameters:
+        summary_length: "medium"
+        format: "bullet"
+
+    linker:
+      enabled: false
+      class: "aurora.skills.builtin.LinkerSkill"
+      parameters:
+        max_suggestions: 5
+        auto_apply: false
+        similarity_threshold: 0.7
+
+    daily_briefing:
+      enabled: false
+      class: "aurora.skills.builtin.DailyBriefingSkill"
+      parameters:
+        include_tasks: true
+        include_recent: true
+        lookback_hours: 24
+
+    tag_manager:
+      enabled: false
+      class: "aurora.skills.builtin.TagManagerSkill"
+      parameters: {}
+
+    template_filler:
+      enabled: false
+      class: "aurora.skills.builtin.TemplateFillerSkill"
+      parameters: {}
+
+    vault_analyst:
+      enabled: false
+      class: "aurora.skills.builtin.VaultAnalystSkill"
+      parameters: {}
+
+# ─────────────────────────────────────────────────
+# DATA STORES
+# ─────────────────────────────────────────────────
+database:
+  sqlite:
+    path: "./data/aurora.db"
+    backup_enabled: true
+    backup_interval: "daily"
+
+  vector_store:
+    type: "chromadb"
+    config:
+      path: "./data/chroma"
+      collection_name: "aurora_vault"
+
+# ─────────────────────────────────────────────────
+# LOGGING
+# ─────────────────────────────────────────────────
+logging:
+  level: "INFO"
+  file: "./logs/aurora.log"
+  max_size_mb: 10
+  backup_count: 5
+  log_sanitized_only: true

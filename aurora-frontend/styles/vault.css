@@ -1,0 +1,125 @@
+.vault-container {
+  display: flex;
+  height: 100%;
+  background: var(--color-bg-primary);
+}
+
+.vault-sidebar {
+  width: 300px;
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-secondary);
+}
+
+.search-bar {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.search-bar input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+.file-tree {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: var(--space-sm);
+}
+
+.folder {
+  margin-bottom: var(--space-xs);
+}
+
+.folder-name {
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-xs) var(--space-sm);
+  display: block;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.folder-name:hover {
+  color: var(--color-text-primary);
+}
+
+.folder-content {
+  padding-left: var(--space-md);
+}
+
+.file {
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  border-radius: var(--radius-sm);
+}
+
+.file:hover {
+  background: var(--color-border);
+}
+
+.note-preview {
+  flex-grow: 1;
+  padding: var(--space-2xl);
+  overflow-y: auto;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-lg);
+}
+
+.file.active {
+  background: var(--color-accent);
+  color: white;
+}
+
+.vault-stats {
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tag-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  margin: 2px 2px;
+  border-radius: 8px;
+  background: var(--color-bg-tertiary, rgba(255,255,255,0.1));
+  color: var(--color-text-secondary);
+}
+
+.file-tags {
+  margin-top: 2px;
+}
+
+.note-content h1 {
+  margin-bottom: var(--space-sm);
+}
+
+.note-tags {
+  margin-bottom: var(--space-md);
+}
+
+.note-body {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  line-height: 1.7;
+  color: var(--color-text-primary);
+  background: none;
+  border: none;
+  padding: 0;
+}

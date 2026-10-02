@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Data (generated at runtime)
+data/
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node.js
+node_modules/
+.next/
+out/
+.turbo/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+docker-compose.override.yml
+
+# spaCy models
+en_core_web_sm*
+
+# ChromaDB
+chroma/
+
+# Test / Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+coverage/
+
+# Context documents (large binary .docx files)
+context/*.docx
+
+# Runtime data directories
+aurora-backend/data/
+aurora-backend/logs/
+aurora-backend/chroma/
