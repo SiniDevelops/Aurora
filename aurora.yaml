@@ -176,7 +176,7 @@ skills:
         format: "bullet"
 
     linker:
-      enabled: false
+      enabled: true
       class: "aurora.skills.builtin.LinkerSkill"
       parameters:
         max_suggestions: 5
@@ -184,7 +184,7 @@ skills:
         similarity_threshold: 0.7
 
     daily_briefing:
-      enabled: false
+      enabled: true
       class: "aurora.skills.builtin.DailyBriefingSkill"
       parameters:
         include_tasks: true
@@ -192,17 +192,17 @@ skills:
         lookback_hours: 24
 
     tag_manager:
-      enabled: false
+      enabled: true
       class: "aurora.skills.builtin.TagManagerSkill"
       parameters: {}
 
     template_filler:
-      enabled: false
+      enabled: true
       class: "aurora.skills.builtin.TemplateFillerSkill"
       parameters: {}
 
     vault_analyst:
-      enabled: false
+      enabled: true
       class: "aurora.skills.builtin.VaultAnalystSkill"
       parameters: {}
 

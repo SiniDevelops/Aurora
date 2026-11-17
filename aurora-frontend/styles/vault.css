@@ -123,3 +123,110 @@
   border: none;
   padding: 0;
 }
+
+/* Search Bar Component */
+.search-bar-container {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.search-input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+.search-filters {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.search-filters select {
+  flex: 1;
+  padding: 4px;
+  font-size: var(--font-size-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.results-area {
+  flex-grow: 1;
+  padding: var(--space-md);
+  overflow-y: auto;
+  background-color: var(--color-bg-primary);
+}
+
+.search-result-card {
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background-color: var(--color-bg-secondary);
+}
+
+.search-result-card:hover {
+  border-color: var(--color-accent);
+}
+
+.search-result-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+  align-items: center;
+}
+
+.search-result-title {
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.search-result-folder {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.search-result-preview {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.vault-actions {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.btn-primary {
+  background-color: var(--color-accent);
+  color: white;
+  border: none;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.btn-primary:disabled, .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

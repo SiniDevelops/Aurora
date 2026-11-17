@@ -95,6 +95,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Vault indexing failed (vault may not exist yet): {e}")
     
+    # ─── Initialize Knowledge Graph ─────────────────
+    from core.link_resolver import LinkResolver
+    from core.backlink_index import BacklinkIndex
+    from core.vault_graph import VaultGraph
+    
+    link_resolver = LinkResolver(vault_manager.notes_cache)
+    backlink_index = BacklinkIndex()
+    backlink_index.rebuild_index(vault_manager.notes_cache)
+    vault_graph = VaultGraph()
+    vault_graph.build_graph(vault_manager.notes_cache, backlink_index)
+    logger.info(f"Knowledge graph built: {len(vault_graph.nodes)} nodes, {len(vault_graph.edges)} edges")
+    
     # Privacy sanitizer — use the sanitizer's own config class
     privacy_cfg = config.privacy_config
     sanitizer_config = SanitizerConfig(
@@ -137,12 +149,39 @@ async def lifespan(app: FastAPI):
         from utils.file_watcher import VaultWatcher
         
         async def on_vault_change(event):
-            """Handle vault file changes — re-index affected notes."""
-            logger.info(f"Vault change detected: {event.event_type} {event.path}")
+            """Handle vault file changes — re-index the note and rebuild the graph."""
+            import os as _os
+            # Watchdog gives absolute OS paths; notes_cache is keyed by
+            # vault-relative forward-slash paths (e.g. "Inbox/My Note.md")
             try:
-                await vault_manager.refresh_note(event.path)
+                rel_path = _os.path.relpath(event.path, config.vault_path).replace("\\", "/")
+            except ValueError:
+                return  # different drive / outside vault
+            if rel_path.startswith(".."):
+                return
+
+            logger.info(f"Vault change detected: {event.event_type} {rel_path}")
+            try:
+                if event.event_type == "deleted":
+                    vault_manager.notes_cache.pop(rel_path, None)
+                else:
+                    await vault_manager.refresh_note(rel_path)
+            except FileNotFoundError:
+                vault_manager.notes_cache.pop(rel_path, None)
             except Exception as e:
-                logger.error(f"Failed to refresh note: {e}")
+                logger.error(f"Failed to refresh note {rel_path}: {e}")
+                return
+
+            # Rebuild link structures so graph/backlinks/orphans stay current
+            try:
+                new_backlinks = BacklinkIndex()
+                new_backlinks.rebuild_index(vault_manager.notes_cache)
+                new_graph = VaultGraph()
+                new_graph.build_graph(vault_manager.notes_cache, new_backlinks)
+                app.state.backlink_index = new_backlinks
+                app.state.vault_graph = new_graph
+            except Exception as e:
+                logger.error(f"Failed to rebuild knowledge graph: {e}")
         
         try:
             watcher = VaultWatcher(config.vault_path, on_vault_change)
@@ -165,6 +204,9 @@ async def lifespan(app: FastAPI):
     app.state.skill_router = skill_router
     app.state.orchestrator = orchestrator
     app.state.watcher = watcher
+    app.state.link_resolver = link_resolver
+    app.state.backlink_index = backlink_index
+    app.state.vault_graph = vault_graph
     
     logger.info(f"{config.app_name} is ready! Listening on {config.host}:{config.port}")
     
@@ -204,10 +246,12 @@ app.add_middleware(
 from api.routes.chat import router as chat_router
 from api.routes.vault import router as vault_router
 from api.routes.settings import router as settings_router
+from api.routes.dashboard import router as dashboard_router
 
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 app.include_router(vault_router, prefix="/api/vault", tags=["Vault"])
 app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
+app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboard"])
 
 # ─── WebSocket ───────────────────────────────────────
 

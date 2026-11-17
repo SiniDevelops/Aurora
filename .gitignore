@@ -64,3 +64,8 @@ context/*.docx
 aurora-backend/data/
 aurora-backend/logs/
 aurora-backend/chroma/
+
+# Backups and build artifacts
+*.bak
+tsconfig.tsbuildinfo
+*.tsbuildinfo

@@ -75,7 +75,9 @@ def _extract_tags(content: str, frontmatter: dict) -> list[str]:
     for match in TAG_RE.finditer(content):
         tags.add(match.group(1))
 
-    return sorted(tags)
+    # Normalize: stringify, strip whitespace and leading '#', drop empties
+    cleaned = {str(t).strip().lstrip("#").strip() for t in tags if t is not None}
+    return sorted(t for t in cleaned if t)
 
 
 def _extract_links(content: str) -> list[dict]:

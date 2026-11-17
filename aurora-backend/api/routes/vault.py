@@ -183,3 +183,48 @@ async def index_vault(request: Request):
         return {"status": "success", "notes_indexed": len(vault_manager.notes_cache)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Knowledge Graph ──────────────────────────────────
+@router.get("/graph")
+async def get_vault_graph(request: Request):
+    """Return the knowledge graph as D3.js-compatible JSON."""
+    try:
+        vault_graph = request.app.state.vault_graph
+        return vault_graph.to_json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/backlinks/{path:path}")
+async def get_backlinks(path: str, request: Request):
+    """Get all backlinks for a given note."""
+    try:
+        backlink_index = request.app.state.backlink_index
+        decoded_path = urllib.parse.unquote(path)
+        backlinks = backlink_index.get_backlinks(decoded_path)
+        return {
+            "path": decoded_path,
+            "backlinks": [
+                {
+                    "source": bl.source_path,
+                    "context": bl.context_snippet,
+                    "link_text": bl.link_text,
+                }
+                for bl in backlinks
+            ],
+            "count": len(backlinks),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/orphans")
+async def get_orphan_notes(request: Request):
+    """Get notes with no inlinks or outlinks."""
+    try:
+        backlink_index = request.app.state.backlink_index
+        orphans = backlink_index.get_orphan_notes()
+        return {"orphans": orphans, "count": len(orphans)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

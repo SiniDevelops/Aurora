@@ -39,10 +39,10 @@ class SkillRouter:
         "/summarize": "summarizer",
         "/summary": "summarizer",
         "/link": "linker",
-        "/daily": "daily_note",
-        "/tag": "tagger",
-        "/template": "templater",
-        "/stats": "vault_stats",
+        "/daily": "daily_briefing",
+        "/tag": "tag_manager",
+        "/template": "template_filler",
+        "/stats": "vault_analyst",
     }
 
     # Compiled regex to find /commands anywhere in text

@@ -10,6 +10,7 @@ export default function Sidebar() {
     { name: 'Dashboard', path: '/' },
     { name: 'Chat', path: '/chat' },
     { name: 'Vault', path: '/vault' },
+    { name: 'Graph', path: '/graph' },
     { name: 'Settings', path: '/settings' },
   ];
 
@@ -28,7 +29,7 @@ export default function Sidebar() {
       <nav style={{ flexGrow: 1, padding: 'var(--space-md)' }}>
         <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
           {navItems.map(item => {
-            const isActive = pathname === item.path;
+            const isActive = pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path));
             return (
               <li key={item.path}>
                 <Link href={item.path} style={{

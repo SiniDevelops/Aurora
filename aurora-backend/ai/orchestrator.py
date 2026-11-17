@@ -92,10 +92,9 @@ class AuroraOrchestrator:
                         "original_input": result.original_input,
                     }
                 elif result.method == "command":
-                    # Bare /command with no argument — use full input
-                    parts = user_input.strip().split(maxsplit=1)
-                    clean_input = parts[1] if len(parts) > 1 else user_input
-                    return {"active_skill": result.skill_id, "sanitized_input": clean_input}
+                    # Bare /command with no argument (e.g. "/template", "/daily")
+                    # → give the skill an empty message so it can show its default view
+                    return {"active_skill": result.skill_id, "sanitized_input": ""}
                 
                 return {"active_skill": result.skill_id}
             except Exception as e:
@@ -126,10 +125,15 @@ class AuroraOrchestrator:
                         f"{context_str}"
                     )
                     
-                    response = await self.llm_client.complete([
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": state["sanitized_input"]},
-                    ])
+                    llm_messages = [{"role": "system", "content": system_prompt}]
+                    for msg in state.get("messages", []):
+                        role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else None)
+                        content = getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else None)
+                        if role in ("user", "assistant") and content:
+                            llm_messages.append({"role": role, "content": content})
+                    llm_messages.append({"role": "user", "content": state["sanitized_input"]})
+
+                    response = await self.llm_client.complete(llm_messages)
                     return {"skill_output": response}
 
                 # Build SkillInput — convert context_builder's VaultContext
@@ -149,9 +153,18 @@ class AuroraOrchestrator:
                 else:
                     vault_ctx = ModelsVaultContext()
 
+                # Convert messages in state to ChatMessage objects for SkillInput
+                from data.models import ChatMessage
+                chat_history: list[ChatMessage] = []
+                for msg in state.get("messages", []):
+                    if isinstance(msg, ChatMessage):
+                        chat_history.append(msg)
+                    elif isinstance(msg, dict):
+                        chat_history.append(ChatMessage(**msg))
+
                 skill_input = SkillInput(
                     user_message=state["sanitized_input"],
-                    chat_history=[],
+                    chat_history=chat_history,
                     vault_context=vault_ctx,
                     parameters={
                         "original_input": state.get("original_input", ""),
@@ -216,10 +229,12 @@ class AuroraOrchestrator:
 
         return workflow.compile()
 
-    async def process_message(self, user_input: str, session_id: str) -> str:
+    async def process_message(
+        self, user_input: str, session_id: str, history: Optional[list] = None
+    ) -> str:
         """Process a user message through the full pipeline."""
         initial_state: AuroraState = {
-            "messages": [],
+            "messages": history or [],
             "user_input": user_input,
             "sanitized_input": "",
             "vault_context": None,
@@ -233,7 +248,7 @@ class AuroraOrchestrator:
         return result.get("response_text", "No response generated.")
 
     async def stream_message(
-        self, user_input: str, session_id: str
+        self, user_input: str, session_id: str, history: Optional[list] = None
     ) -> AsyncIterator[str]:
         """
         Stream a response token-by-token.
@@ -241,8 +256,10 @@ class AuroraOrchestrator:
         Currently processes the full pipeline first, then streams the result.
         Future: integrate streaming directly into the LLM execution step.
         """
-        response = await self.process_message(user_input, session_id)
+        response = await self.process_message(user_input, session_id, history=history)
         # Stream word-by-word for now
         words = response.split()
         for i, word in enumerate(words):
             yield word + (" " if i < len(words) - 1 else "")
+
+    stream_process_message = stream_message
