@@ -57,5 +57,12 @@ class LLMClient:
     def get_active_provider(self) -> str:
         return self.active_provider
 
+    def switch_provider(self, provider_name: str, provider_config: dict[str, Any]) -> None:
+        """Hot-swap the active LLM adapter at runtime."""
+        new_adapter = self._load_adapter(provider_name, provider_config)
+        self.providers_config[provider_name] = provider_config
+        self.active_provider = provider_name
+        self.adapter = new_adapter
+
     def get_model_info(self) -> ModelInfo:
         return self.adapter.get_model_info()

@@ -27,13 +27,13 @@ class TestGeminiAdapterRetry:
         mock_response.text = "Hello world"
         
         adapter.model = MagicMock()
-        adapter.model.generate_content_async = AsyncMock(return_value=mock_response)
+        adapter.model.generate_content = MagicMock(return_value=mock_response)
 
         messages = [{"role": "user", "content": "Hi"}]
         result = await adapter.complete(messages)
 
         assert result == "Hello world"
-        assert adapter.model.generate_content_async.call_count == 1
+        assert adapter.model.generate_content.call_count == 1
 
     @pytest.mark.asyncio
     async def test_complete_retries_on_429_and_succeeds(self, adapter):
@@ -43,7 +43,7 @@ class TestGeminiAdapterRetry:
         mock_response.text = "Recovered response"
 
         adapter.model = MagicMock()
-        adapter.model.generate_content_async = AsyncMock(
+        adapter.model.generate_content = MagicMock(
             side_effect=[err_429, err_429, mock_response]
         )
 
@@ -53,7 +53,7 @@ class TestGeminiAdapterRetry:
             result = await adapter.complete(messages)
 
             assert result == "Recovered response"
-            assert adapter.model.generate_content_async.call_count == 3
+            assert adapter.model.generate_content.call_count == 3
             # Check backoff delays: first retry 2s, second retry 4s
             assert mock_sleep.call_count == 2
             mock_sleep.assert_any_call(2)
@@ -69,7 +69,7 @@ class TestGeminiAdapterRetry:
         err_429 = google_exceptions.ResourceExhausted("429 Resource has been exhausted")
 
         adapter.model = MagicMock()
-        adapter.model.generate_content_async = AsyncMock(side_effect=err_429)
+        adapter.model.generate_content = MagicMock(side_effect=err_429)
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep, \
              patch("ai.adapters.gemini_adapter.logger.warning") as mock_log_warn, \
@@ -82,7 +82,7 @@ class TestGeminiAdapterRetry:
             # Original error is preserved
             assert exc_info.value is err_429
             # Exactly 4 calls: 1 initial + 3 retries
-            assert adapter.model.generate_content_async.call_count == 4
+            assert adapter.model.generate_content.call_count == 4
             # Backoff delays were 2s, 4s, 8s
             assert mock_sleep.call_count == 3
             mock_sleep.assert_any_call(2)
@@ -98,7 +98,7 @@ class TestGeminiAdapterRetry:
         non_rate_err = ValueError("Invalid prompt format")
 
         adapter.model = MagicMock()
-        adapter.model.generate_content_async = AsyncMock(side_effect=non_rate_err)
+        adapter.model.generate_content = MagicMock(side_effect=non_rate_err)
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             messages = [{"role": "user", "content": "Test"}]
@@ -107,7 +107,7 @@ class TestGeminiAdapterRetry:
 
             assert "Gemini error: Invalid prompt format" in str(exc_info.value)
             # Should not retry
-            assert adapter.model.generate_content_async.call_count == 1
+            assert adapter.model.generate_content.call_count == 1
             assert mock_sleep.call_count == 0
 
     @pytest.mark.asyncio
@@ -115,14 +115,14 @@ class TestGeminiAdapterRetry:
         """Streaming retries on 429 and streams chunks successfully."""
         err_429 = google_exceptions.ResourceExhausted("429 Resource has been exhausted")
         
-        async def fake_stream():
+        def fake_stream():
             for word in ["Hello", " ", "world"]:
                 chunk = MagicMock()
                 chunk.text = word
                 yield chunk
 
         adapter.model = MagicMock()
-        adapter.model.generate_content_async = AsyncMock(
+        adapter.model.generate_content = MagicMock(
             side_effect=[err_429, fake_stream()]
         )
 
@@ -134,7 +134,7 @@ class TestGeminiAdapterRetry:
                 chunks.append(chunk)
 
             assert "".join(chunks) == "Hello world"
-            assert adapter.model.generate_content_async.call_count == 2
+            assert adapter.model.generate_content.call_count == 2
             assert mock_sleep.call_count == 1
             mock_sleep.assert_called_once_with(2)
             assert mock_log_warn.call_count == 1
@@ -145,7 +145,7 @@ class TestGeminiAdapterRetry:
         err_429 = google_exceptions.ResourceExhausted("429 Resource has been exhausted")
 
         adapter.model = MagicMock()
-        adapter.model.generate_content_async = AsyncMock(side_effect=err_429)
+        adapter.model.generate_content = MagicMock(side_effect=err_429)
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep, \
              patch("ai.adapters.gemini_adapter.logger.error") as mock_log_err:
@@ -156,7 +156,7 @@ class TestGeminiAdapterRetry:
                     pass
 
             assert exc_info.value is err_429
-            assert adapter.model.generate_content_async.call_count == 4
+            assert adapter.model.generate_content.call_count == 4
             assert mock_sleep.call_count == 3
             mock_sleep.assert_any_call(2)
             mock_sleep.assert_any_call(4)

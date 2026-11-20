@@ -62,6 +62,9 @@ llm:
       config:
         api_key: "${GEMINI_API_KEY}"
         default_model: "gemini-3.6-flash"
+        # Tried in order if the default model is overloaded (503) or times out
+        fallback_models: ["gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
+        timeout: 60
         temperature: 0.7
         max_tokens: 2000
 

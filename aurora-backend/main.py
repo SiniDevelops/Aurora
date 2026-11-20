@@ -105,7 +105,30 @@ async def lifespan(app: FastAPI):
     backlink_index.rebuild_index(vault_manager.notes_cache)
     vault_graph = VaultGraph()
     vault_graph.build_graph(vault_manager.notes_cache, backlink_index)
-    logger.info(f"Knowledge graph built: {len(vault_graph.nodes)} nodes, {len(vault_graph.edges)} edges")
+    logger.info(f"Knowledge graph built: {len(vault_graph.nodes)} nodes, {len(vault_graph.directed_edges)} edges")
+    
+    # ─── Incremental Chunk Index ─────────────────────
+    from core.indexer import VaultIndexer
+    
+    indexer = VaultIndexer(
+        vault_manager,
+        chroma_store=chroma_store,
+        embedding_manager=embedding_manager,
+        state_path=str(Path(config.chroma_path).parent / "index_state.json"),
+    )
+    try:
+        idx_stats = await indexer.full_sync()
+        logger.info(
+            f"Chunk index: {idx_stats['chunks']} sections from {idx_stats['notes']} notes"
+            + (
+                f" | embedded {idx_stats['embedded']}, unchanged {idx_stats['unchanged']}, "
+                f"removed {idx_stats['removed']}"
+                if indexer.embeddings_available
+                else " | semantic search off (no embedding provider)"
+            )
+        )
+    except Exception as e:
+        logger.error(f"Chunk indexing failed: {e}")
     
     # Privacy sanitizer — use the sanitizer's own config class
     privacy_cfg = config.privacy_config
@@ -119,7 +142,13 @@ async def lifespan(app: FastAPI):
     logger.info("Privacy sanitizer initialized")
     
     session_manager = SessionManager(sqlite_store)
-    context_builder = ContextBuilder(vault_manager, chroma_store, embedding_manager)
+    context_builder = ContextBuilder(
+        vault_manager,
+        chroma_store,
+        embedding_manager,
+        indexer=indexer,
+        graph_getter=lambda: getattr(app.state, "vault_graph", None),
+    )
     
     # ─── Initialize Skills ───────────────────────────
     from skills.registry import SkillRegistry
@@ -164,12 +193,20 @@ async def lifespan(app: FastAPI):
             try:
                 if event.event_type == "deleted":
                     vault_manager.notes_cache.pop(rel_path, None)
+                    changed = indexer.remove_note(rel_path)
                 else:
                     await vault_manager.refresh_note(rel_path)
+                    changed = await indexer.index_note(rel_path)
             except FileNotFoundError:
                 vault_manager.notes_cache.pop(rel_path, None)
+                changed = indexer.remove_note(rel_path)
             except Exception as e:
                 logger.error(f"Failed to refresh note {rel_path}: {e}")
+                return
+
+            if not changed:
+                # Duplicate watcher event or a save with identical content
+                logger.debug(f"No content change in {rel_path}; skipping rebuild")
                 return
 
             # Rebuild link structures so graph/backlinks/orphans stay current
@@ -207,6 +244,7 @@ async def lifespan(app: FastAPI):
     app.state.link_resolver = link_resolver
     app.state.backlink_index = backlink_index
     app.state.vault_graph = vault_graph
+    app.state.indexer = indexer
     
     logger.info(f"{config.app_name} is ready! Listening on {config.host}:{config.port}")
     

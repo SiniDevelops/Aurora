@@ -111,12 +111,28 @@ class AuroraOrchestrator:
                     vault_ctx = state.get("vault_context")
                     context_str = ""
                     if vault_ctx and hasattr(vault_ctx, 'notes') and vault_ctx.notes:
-                        note_summaries = []
+                        # Primary notes carry only their relevant sections (already budget-trimmed)
+                        blocks = []
                         for n in vault_ctx.notes[:5]:
                             title = getattr(n, 'title', 'Untitled')
-                            preview = getattr(n, 'content', '')[:200]
-                            note_summaries.append(f"- {title}: {preview}")
-                        context_str = "\n\nRelevant notes from the user's vault:\n" + "\n".join(note_summaries)
+                            path = getattr(n, 'path', '')
+                            blocks.append(f"### {title} ({path})\n{getattr(n, 'content', '')}")
+                        context_str = "\n\nRelevant notes from the user's vault:\n\n" + "\n\n".join(blocks)
+
+                        # Graph neighbours of those notes, as short excerpts
+                        linked = getattr(vault_ctx, 'linked_notes', []) or []
+                        linked_via = getattr(vault_ctx, 'linked_via', {}) or {}
+                        if linked:
+                            linked_blocks = []
+                            for n in linked:
+                                via = ", ".join(linked_via.get(n.path, []))
+                                linked_blocks.append(
+                                    f"- **{n.title}** (linked from {via}): {n.content}"
+                                )
+                            context_str += (
+                                "\n\nLinked notes (connected via wiki links to the notes above):\n"
+                                + "\n".join(linked_blocks)
+                            )
                     
                     system_prompt = (
                         "You are Aurora, a helpful AI assistant integrated with the user's Obsidian knowledge vault. "

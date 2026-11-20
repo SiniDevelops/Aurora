@@ -23,9 +23,58 @@ class UpdateNoteRequest(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
+    query: str = ""
     limit: int = 10
-    tags: Optional[List[str]] = None
+    tags: Optional[List[str]] = None          # note must carry ALL of these tags
+    folder: Optional[str] = None              # any depth, e.g. "Projects/AI"
+    date_from: Optional[str] = None           # "YYYY-MM-DD" inclusive
+    date_to: Optional[str] = None             # "YYYY-MM-DD" inclusive
+    date_field: str = "modified"              # "modified" | "created"
+    include_sections: bool = True             # attach best-matching sections
+
+
+def _parse_day(value: Optional[str]):
+    if not value:
+        return None
+    from datetime import date
+    try:
+        return date.fromisoformat(value[:10])
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid date '{value}', expected YYYY-MM-DD")
+
+
+def _note_matches_filters(note, tags, folder, day_from, day_to, date_field) -> bool:
+    if tags:
+        note_tags = {t.lower().lstrip("#") for t in note.tags}
+        if not all(t.lower().lstrip("#") in note_tags for t in tags):
+            return False
+    if folder:
+        prefix = folder.replace("\\", "/").strip("/") + "/"
+        if not note.path.replace("\\", "/").startswith(prefix):
+            return False
+    if day_from or day_to:
+        stamp = note.created_at if date_field == "created" else note.modified_at
+        day = stamp.date()
+        if day_from and day < day_from:
+            return False
+        if day_to and day > day_to:
+            return False
+    return True
+
+
+def _snippet(text: str, query: str, width: int = 180) -> str:
+    """Return a short excerpt of text centred on the first query term."""
+    flat = " ".join(text.split())
+    lower = flat.lower()
+    pos = -1
+    for term in [query.lower().strip()] + query.lower().split():
+        if term and (pos := lower.find(term)) >= 0:
+            break
+    if pos < 0:
+        return flat[:width] + ("…" if len(flat) > width else "")
+    start = max(0, pos - width // 3)
+    end = min(len(flat), start + width)
+    return ("…" if start > 0 else "") + flat[start:end] + ("…" if end < len(flat) else "")
 
 
 # ─── List all notes ──────────────────────────────────
@@ -40,7 +89,10 @@ async def list_notes(request: Request):
                 "path": note.path,
                 "title": note.title,
                 "tags": note.tags,
+                "folder": note.folder,
                 "word_count": len(note.content.split()) if note.content else 0,
+                "created_at": note.created_at.isoformat(),
+                "modified_at": note.modified_at.isoformat(),
             })
         return notes
     except Exception as e:
@@ -152,23 +204,70 @@ async def delete_note(request: Request, path: str):
 # ─── Search ───────────────────────────────────────────
 @router.post("/search")
 async def search_vault(request: Request, search_request: SearchRequest):
-    """Search vault notes."""
+    """Search vault notes with optional tag / folder / date-range filters.
+
+    An empty query with filters returns all matching notes (newest first).
+    When include_sections is set, each result carries its best-matching
+    heading sections from the chunk index.
+    """
     try:
-        vault_manager = request.app.state.vault_manager
-        results = await vault_manager.search_notes(
-            search_request.query, search_request.limit
-        )
+        state = request.app.state
+        vault_manager = state.vault_manager
+        req = search_request
+        query = (req.query or "").strip()
+        day_from, day_to = _parse_day(req.date_from), _parse_day(req.date_to)
+        date_field = "created" if req.date_field == "created" else "modified"
+
+        if query:
+            candidates = await vault_manager.search_notes(query, len(vault_manager.notes_cache) or 1)
+        else:
+            candidates = sorted(vault_manager.notes_cache.values(), key=lambda n: n.modified_at, reverse=True)
+
+        filtered = [n for n in candidates
+                    if _note_matches_filters(n, req.tags, req.folder, day_from, day_to, date_field)]
+
+        # Section hits (also lets notes match on section text the plain search missed)
+        sections_by_path: dict = {}
+        indexer = getattr(state, "indexer", None)
+        if query and req.include_sections and indexer is not None:
+            for hit in indexer.search_chunks(query, limit=200):
+                bucket = sections_by_path.setdefault(hit.path, [])
+                if len(bucket) < 3:
+                    bucket.append({
+                        "heading": hit.chunk.metadata.get("heading", ""),
+                        "snippet": _snippet(hit.chunk.content, query),
+                        "score": round(hit.score, 2),
+                    })
+            seen = {n.path for n in filtered}
+            for path in sections_by_path:
+                note = vault_manager.notes_cache.get(path)
+                if note and path not in seen and _note_matches_filters(
+                        note, req.tags, req.folder, day_from, day_to, date_field):
+                    filtered.append(note)
+                    seen.add(path)
+
+        total = len(filtered)
+        results = filtered[: max(1, req.limit)]
         return {
+            "total": total,
             "results": [
                 {
                     "path": n.path,
                     "title": n.title,
-                    "preview": n.content[:200] if n.content else "",
+                    "preview": _snippet(n.clean_content or n.content or "", query) if query
+                               else (n.clean_content or n.content or "")[:200],
                     "tags": n.tags,
+                    "folder": n.folder,
+                    "word_count": n.word_count or (len(n.content.split()) if n.content else 0),
+                    "created_at": n.created_at.isoformat(),
+                    "modified_at": n.modified_at.isoformat(),
+                    "sections": sections_by_path.get(n.path, []),
                 }
                 for n in results
-            ]
+            ],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -176,13 +275,67 @@ async def search_vault(request: Request, search_request: SearchRequest):
 # ─── Re-index ─────────────────────────────────────────
 @router.post("/index")
 async def index_vault(request: Request):
-    """Trigger full vault re-indexing."""
+    """Trigger a full vault re-scan. Only changed notes are re-embedded."""
     try:
-        vault_manager = request.app.state.vault_manager
+        from core.backlink_index import BacklinkIndex
+        from core.vault_graph import VaultGraph
+
+        state = request.app.state
+        vault_manager = state.vault_manager
+        vault_manager.notes_cache.clear()  # drop notes deleted while the watcher was off
         await vault_manager.initialize()
-        return {"status": "success", "notes_indexed": len(vault_manager.notes_cache)}
+
+        stats = {}
+        indexer = getattr(state, "indexer", None)
+        if indexer is not None:
+            stats = await indexer.full_sync()
+
+        backlinks = BacklinkIndex()
+        backlinks.rebuild_index(vault_manager.notes_cache)
+        graph = VaultGraph()
+        graph.build_graph(vault_manager.notes_cache, backlinks)
+        state.backlink_index = backlinks
+        state.vault_graph = graph
+
+        return {
+            "status": "success",
+            "notes_indexed": len(vault_manager.notes_cache),
+            **stats,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/index/stats")
+async def index_stats(request: Request):
+    """Chunk index / embedding status."""
+    indexer = getattr(request.app.state, "indexer", None)
+    if indexer is None:
+        raise HTTPException(status_code=503, detail="Indexer not initialized")
+    return indexer.get_stats()
+
+
+@router.get("/search/sections")
+async def search_sections(request: Request, q: str, limit: int = 10):
+    """Section-level search: returns the matching heading sections, not whole notes."""
+    indexer = getattr(request.app.state, "indexer", None)
+    if indexer is None:
+        raise HTTPException(status_code=503, detail="Indexer not initialized")
+    hits = indexer.search_chunks(q, limit=limit)
+    return {
+        "query": q,
+        "results": [
+            {
+                "path": h.path,
+                "title": h.chunk.metadata.get("title", ""),
+                "heading": h.chunk.metadata.get("heading", ""),
+                "heading_path": h.chunk.heading_path,
+                "snippet": h.chunk.content[:300],
+                "score": round(h.score, 2),
+            }
+            for h in hits
+        ],
+    }
 
 
 # ─── Knowledge Graph ──────────────────────────────────
